@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Pencil, Trash, Trash2 } from "lucide-react";
+import { Pencil, Trash2, Loader2 } from "lucide-react";
 import {
     Table,
     TableBody,
@@ -25,23 +25,10 @@ import {
     DialogFooter,
 } from "@/components/ui/dialog";
 
-const todoData = [
-    {
-        id: 1,
-        title: "Buy groceries",
-        description: "Get the ingredients for the recipe",
-        completed: false,
-    },
-    {
-        id: 2,
-        title: "Clean the house",
-        description: "Mop the floor, vacuum the carpet, and dust the shelves",
-        completed: false,
-    },
-];
-
 export default function TodoTable() {
-    // This controls the open/close state of the modal
+    // This controls the loading state
+    const [isLoading, setIsLoading] = useState(true);
+    const [todos, setTodos] = useState([]);
     const [isModelOpen, setIsModelOpen] = useState(false);
 
     // This holds the form data for the new todo
@@ -49,9 +36,6 @@ export default function TodoTable() {
         title: "",
         description: "",
     });
-
-    // This holds the list of todos in the table
-    const [todos, setTodos] = useState(todoData);
 
     // This holds the form data for the edited todo
     const [editedTodo, setEditedTodo] = useState({
@@ -67,55 +51,131 @@ export default function TodoTable() {
         description: "",
     });
 
-    // This is the function that adds a new todo to the list
-    const addTodo = () => {
+    // Add a new state for form submission loading
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // Add fetch function
+    const fetchTodos = async () => {
+        try {
+            const response = await fetch("/api/todos");
+            const data = await response.json();
+            if (response.ok) {
+                setTodos(data);
+            } else {
+                console.error("Error fetching todos:", data.error);
+            }
+        } catch (error) {
+            console.error("Error fetching todos:", error);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    // Add useEffect to fetch todos on mount
+    useEffect(() => {
+        fetchTodos();
+    }, []);
+
+    // Update the addTodo function
+    const addTodo = async () => {
         if (!validateForm(newTodo)) {
             return;
         }
 
-        setTodos([
-            ...todos,
-            {
-                id: todos.length + 1,
-                title: newTodo.title,
-                description: newTodo.description,
-                completed: false,
-            },
-        ]);
+        setIsSubmitting(true);
+        try {
+            const response = await fetch("/api/todos", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify(newTodo),
+            });
 
-        setNewTodo({
-            title: "",
-            description: "",
-        });
+            const data = await response.json();
 
-        setIsModelOpen(false);
+            if (response.ok) {
+                await fetchTodos(); // Refresh the todos list
+                setNewTodo({
+                    title: "",
+                    description: "",
+                });
+                setIsModelOpen(false);
+            } else {
+                console.error("Error adding todo:", data.error);
+                // Optionally set an error message here
+            }
+        } catch (error) {
+            console.error("Error adding todo:", error);
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
-    const saveEditedTodo = () => {
+    const saveEditedTodo = async () => {
         if (!validateForm(editedTodo)) {
             return;
         }
 
-        setTodos(
-            todos.map((todo) => (todo.id === editedTodo.id ? editedTodo : todo))
-        );
+        setIsSubmitting(true);
+        try {
+            const response = await fetch(`/api/todos/${editedTodo.id}`, {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    title: editedTodo.title,
+                    description: editedTodo.description,
+                    completed: editedTodo.completed,
+                }),
+            });
 
-        setEditedTodo({
-            id: null,
-            title: "",
-            description: "",
-            completed: false,
-        });
+            const data = await response.json();
 
-        setIsModelOpen(false);
+            if (response.ok) {
+                await fetchTodos(); // Refresh the todos list
+                setEditedTodo({
+                    id: null,
+                    title: "",
+                    description: "",
+                    completed: false,
+                });
+                setIsModelOpen(false);
+            } else {
+                console.error("Error updating todo:", data.error);
+            }
+        } catch (error) {
+            console.error("Error updating todo:", error);
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
-    const handleCheckboxChange = (id) => {
-        setTodos(
-            todos.map((todo) =>
-                todo.id === id ? { ...todo, completed: !todo.completed } : todo
-            )
-        );
+    const handleCheckboxChange = async (id) => {
+        const todo = todos.find((t) => t.id === id);
+        if (!todo) return;
+
+        try {
+            const response = await fetch(`/api/todos/${id}`, {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    ...todo,
+                    completed: !todo.completed,
+                }),
+            });
+
+            if (response.ok) {
+                await fetchTodos(); // Refresh the todos list
+            } else {
+                console.error("Error updating todo status");
+            }
+        } catch (error) {
+            console.error("Error updating todo status:", error);
+        }
     };
 
     const handleEditTodo = (id) => {
@@ -126,8 +186,20 @@ export default function TodoTable() {
         setIsModelOpen(true);
     };
 
-    const handleDeleteTodo = (id) => {
-        setTodos(todos.filter((todo) => todo.id !== id));
+    const handleDeleteTodo = async (id) => {
+        try {
+            const response = await fetch(`/api/todos/${id}`, {
+                method: "DELETE",
+            });
+
+            if (response.ok) {
+                await fetchTodos(); // Refresh the todos list
+            } else {
+                console.error("Error deleting todo");
+            }
+        } catch (error) {
+            console.error("Error deleting todo:", error);
+        }
     };
 
     const validateForm = (todo) => {
@@ -249,7 +321,19 @@ export default function TodoTable() {
                                     </div>
                                 )}
                                 <DialogFooter>
-                                    <Button type="submit">Save</Button>
+                                    <Button
+                                        type="submit"
+                                        disabled={isSubmitting}
+                                    >
+                                        {isSubmitting ? (
+                                            <>
+                                                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                                Saving...
+                                            </>
+                                        ) : (
+                                            "Save"
+                                        )}
+                                    </Button>
                                 </DialogFooter>
                             </form>
                         </DialogContent>
@@ -272,69 +356,91 @@ export default function TodoTable() {
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {todos.map((todo) => (
-                            <TableRow
-                                key={todo.id}
-                                className={`group ${
-                                    todo.completed ? "bg-gray-50" : ""
-                                }`}
-                            >
-                                <TableCell>
-                                    <div className="flex items-center justify-center">
-                                        <Checkbox
-                                            checked={todo.completed}
-                                            onCheckedChange={() =>
-                                                handleCheckboxChange(todo.id)
-                                            }
-                                            className="rounded-full h-4 w-4 border data-[state=checked]:border-none data-[state=checked]:bg-primary"
-                                        />
-                                    </div>
-                                </TableCell>
+                        {isLoading ? (
+                            <TableRow>
                                 <TableCell
-                                    className={`align-top whitespace-normal py-4 break-words ${
-                                        todo.completed
-                                            ? "line-through text-gray-400"
-                                            : "font-bold"
-                                    }`}
+                                    colSpan={4}
+                                    className="text-center py-10"
                                 >
-                                    {todo.title}
-                                </TableCell>
-                                <TableCell
-                                    className={`align-top whitespace-normal py-4 leading-normal break-words
-                                    ${
-                                        todo.completed
-                                            ? "line-through text-gray-400"
-                                            : ""
-                                    }`}
-                                >
-                                    {todo.description}
-                                </TableCell>
-                                <TableCell className="align-top">
-                                    <div className="flex items-center justify-center gap-2">
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            onClick={() =>
-                                                handleEditTodo(todo.id)
-                                            }
-                                            className="hover:bg-[#0466c8] hover:text-white"
-                                        >
-                                            <Pencil className="h-4 w-4" />
-                                        </Button>
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            onClick={() =>
-                                                handleDeleteTodo(todo.id)
-                                            }
-                                            className="hover:bg-[#e5383b] hover:text-white"
-                                        >
-                                            <Trash2 className="h-4 w-4" />
-                                        </Button>
-                                    </div>
+                                    <Loader2 className="h-6 w-6 animate-spin mx-auto text-gray-400" />
                                 </TableCell>
                             </TableRow>
-                        ))}
+                        ) : todos.length === 0 ? (
+                            <TableRow>
+                                <TableCell
+                                    colSpan={4}
+                                    className="text-center py-10 text-gray-500"
+                                >
+                                    No todos yet. Add one to get started!
+                                </TableCell>
+                            </TableRow>
+                        ) : (
+                            todos.map((todo) => (
+                                <TableRow
+                                    key={todo.id}
+                                    className={`group ${
+                                        todo.completed ? "bg-gray-50" : ""
+                                    }`}
+                                >
+                                    <TableCell>
+                                        <div className="flex items-center justify-center">
+                                            <Checkbox
+                                                checked={todo.completed}
+                                                onCheckedChange={() =>
+                                                    handleCheckboxChange(
+                                                        todo.id
+                                                    )
+                                                }
+                                                className="rounded-full h-4 w-4 border data-[state=checked]:border-none data-[state=checked]:bg-primary"
+                                            />
+                                        </div>
+                                    </TableCell>
+                                    <TableCell
+                                        className={`align-top whitespace-normal py-4 break-words ${
+                                            todo.completed
+                                                ? "line-through text-gray-400"
+                                                : "font-bold"
+                                        }`}
+                                    >
+                                        {todo.title}
+                                    </TableCell>
+                                    <TableCell
+                                        className={`align-top whitespace-normal py-4 leading-normal break-words
+                                        ${
+                                            todo.completed
+                                                ? "line-through text-gray-400"
+                                                : ""
+                                        }`}
+                                    >
+                                        {todo.description}
+                                    </TableCell>
+                                    <TableCell className="align-top">
+                                        <div className="flex items-center justify-center gap-2">
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() =>
+                                                    handleEditTodo(todo.id)
+                                                }
+                                                className="hover:bg-[#0466c8] hover:text-white"
+                                            >
+                                                <Pencil className="h-4 w-4" />
+                                            </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() =>
+                                                    handleDeleteTodo(todo.id)
+                                                }
+                                                className="hover:bg-[#e5383b] hover:text-white"
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                        </div>
+                                    </TableCell>
+                                </TableRow>
+                            ))
+                        )}
                     </TableBody>
                 </Table>
             </div>
