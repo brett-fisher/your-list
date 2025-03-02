@@ -7,6 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Pencil, Trash2, Loader2 } from "lucide-react";
+import { toast } from "react-hot-toast";
+import { Toaster } from "react-hot-toast";
 import {
     Table,
     TableBody,
@@ -76,13 +78,24 @@ export default function TodoTable() {
         fetchTodos();
     }, []);
 
-    // Update the addTodo function
+    // adds a new todo optimistically
+    // updates ui immediately and reverts on failure
     const addTodo = async () => {
         if (!validateForm(newTodo)) {
             return;
         }
 
-        setIsSubmitting(true);
+        const tempTodo = {
+            id: `temp_${crypto.randomUUID()}`,
+            title: newTodo.title,
+            description: newTodo.description,
+            completed: false,
+        };
+
+        setTodos([...todos, tempTodo]);
+        setIsModelOpen(false);
+        setNewTodo({ title: "", description: "" });
+
         try {
             const response = await fetch("/api/todos", {
                 method: "POST",
@@ -92,23 +105,27 @@ export default function TodoTable() {
                 body: JSON.stringify(newTodo),
             });
 
-            const data = await response.json();
-
-            if (response.ok) {
-                await fetchTodos(); // Refresh the todos list
-                setNewTodo({
-                    title: "",
-                    description: "",
-                });
-                setIsModelOpen(false);
-            } else {
-                console.error("Error adding todo:", data.error);
-                // Optionally set an error message here
+            if (!response.ok) {
+                setTodos((currentTodos) =>
+                    currentTodos.filter((t) => t.id !== tempTodo.id)
+                );
+                toast.error(
+                    "We were unable to add the todo. Please try again."
+                );
+                console.log("Error adding todo: server error");
+                return;
             }
+
+            const data = await response.json();
+            setTodos((currentTodos) =>
+                currentTodos.map((t) => (t.id === tempTodo.id ? data : t))
+            );
         } catch (error) {
+            setTodos((currentTodos) =>
+                currentTodos.filter((t) => t.id !== tempTodo.id)
+            );
+            toast.error("Network error. Check your connection and try again.");
             console.error("Error adding todo:", error);
-        } finally {
-            setIsSubmitting(false);
         }
     };
 
@@ -117,7 +134,14 @@ export default function TodoTable() {
             return;
         }
 
-        setIsSubmitting(true);
+        const originalTodo = todos.find((t) => t.id === editedTodo.id);
+        if (!originalTodo) return;
+
+        setTodos((currentTodos) =>
+            currentTodos.map((t) => (t.id === editedTodo.id ? editedTodo : t))
+        );
+        setIsModelOpen(false);
+
         try {
             const response = await fetch(`/api/todos/${editedTodo.id}`, {
                 method: "PUT",
@@ -131,30 +155,46 @@ export default function TodoTable() {
                 }),
             });
 
-            const data = await response.json();
-
-            if (response.ok) {
-                await fetchTodos(); // Refresh the todos list
-                setEditedTodo({
-                    id: null,
-                    title: "",
-                    description: "",
-                    completed: false,
-                });
-                setIsModelOpen(false);
-            } else {
-                console.error("Error updating todo:", data.error);
+            if (!response.ok) {
+                // Revert to original if failed
+                setTodos((currentTodos) =>
+                    currentTodos.map((t) =>
+                        t.id === editedTodo.id ? originalTodo : t
+                    )
+                );
+                toast.error("Unable to update todo. Please try again.");
+                return;
             }
+
+            setEditedTodo({
+                id: null,
+                title: "",
+                description: "",
+                completed: false,
+            });
         } catch (error) {
+            // Revert to original on network error
+            setTodos((currentTodos) =>
+                currentTodos.map((t) =>
+                    t.id === editedTodo.id ? originalTodo : t
+                )
+            );
+            toast.error("Network error. Check your connection and try again.");
             console.error("Error updating todo:", error);
-        } finally {
-            setIsSubmitting(false);
         }
     };
 
+    // handles checkbox change with optimistic update
+    // updates ui immediately and reverts on failure
     const handleCheckboxChange = async (id) => {
         const todo = todos.find((t) => t.id === id);
         if (!todo) return;
+
+        setTodos(
+            todos.map((t) =>
+                t.id === id ? { ...t, completed: !t.completed } : t
+            )
+        );
 
         try {
             const response = await fetch(`/api/todos/${id}`, {
@@ -163,18 +203,36 @@ export default function TodoTable() {
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                    ...todo,
                     completed: !todo.completed,
                 }),
             });
 
-            if (response.ok) {
-                await fetchTodos(); // Refresh the todos list
-            } else {
-                console.error("Error updating todo status");
+            if (!response.ok) {
+                setTodos(
+                    todos.map((t) =>
+                        t.id === id ? { ...t, completed: todo.completed } : t
+                    )
+                );
+                toast.error(
+                    "We were unable to update the todo status. Please try again."
+                );
+                console.error(
+                    "We were unable to update the todo status. Please try again."
+                );
             }
         } catch (error) {
-            console.error("Error updating todo status:", error);
+            setTodos(
+                todos.map((t) =>
+                    t.id === id ? { ...t, completed: todo.completed } : t
+                )
+            );
+            toast.error(
+                "Hmm, looks like there was a network error. Check your connection and try again."
+            );
+            console.error(
+                "Hmm, looks like there was a network error. Check your connection and try again.",
+                error
+            );
         }
     };
 
@@ -187,17 +245,26 @@ export default function TodoTable() {
     };
 
     const handleDeleteTodo = async (id) => {
+        const todoToDelete = todos.find((t) => t.id === id);
+        if (!todoToDelete) return;
+
+        setTodos((currentTodos) => currentTodos.filter((t) => t.id !== id));
+
         try {
             const response = await fetch(`/api/todos/${id}`, {
                 method: "DELETE",
             });
 
-            if (response.ok) {
-                await fetchTodos(); // Refresh the todos list
-            } else {
-                console.error("Error deleting todo");
+            if (!response.ok) {
+                setTodos((currentTodos) => [...currentTodos, todoToDelete]);
+                toast.error("Unable to delete todo. Please try again.");
+                return;
             }
+
+            toast.success("Todo deleted successfully!");
         } catch (error) {
+            setTodos((currentTodos) => [...currentTodos, todoToDelete]);
+            toast.error("Network error. Check your connection and try again.");
             console.error("Error deleting todo:", error);
         }
     };
@@ -217,6 +284,16 @@ export default function TodoTable() {
 
     return (
         <div className="p-20">
+            <Toaster
+                position="bottom-center"
+                toastOptions={{
+                    duration: 5000,
+                    style: {
+                        background: "#333",
+                        color: "#fff",
+                    },
+                }}
+            />
             <div className="mx-auto max-w-4xl w-full">
                 <div className="flex items-center justify-between pb-6">
                     <h1 className="text-2xl font-bold">
@@ -321,19 +398,7 @@ export default function TodoTable() {
                                     </div>
                                 )}
                                 <DialogFooter>
-                                    <Button
-                                        type="submit"
-                                        disabled={isSubmitting}
-                                    >
-                                        {isSubmitting ? (
-                                            <>
-                                                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                                                Saving...
-                                            </>
-                                        ) : (
-                                            "Save"
-                                        )}
-                                    </Button>
+                                    <Button type="submit">Save</Button>
                                 </DialogFooter>
                             </form>
                         </DialogContent>
