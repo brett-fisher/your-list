@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import useFetchTodos from "@/hooks/useFetchTodos";
+import { useState } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -26,11 +27,17 @@ import {
     DialogDescription,
     DialogFooter,
 } from "@/components/ui/dialog";
+import useCreateTodos from "@/hooks/useCreateTodos";
+import useEditTodo from "@/hooks/useEditTodo";
+import useDeleteTodo from "@/hooks/useDeleteTodo";
+import useUpdateCheckbox from "@/hooks/useUpdateCheckbox";
 
 export default function TodoTable() {
-    // This controls the loading state
-    const [isLoading, setIsLoading] = useState(true);
-    const [todos, setTodos] = useState([]);
+    const { data: todos, isPending } = useFetchTodos();
+    const { mutate: createTodo } = useCreateTodos();
+    const { mutate: editTodo } = useEditTodo();
+    const { mutate: deleteTodo } = useDeleteTodo();
+    const { mutate: updateCheckbox } = useUpdateCheckbox();
     const [isModelOpen, setIsModelOpen] = useState(false);
 
     // This holds the form data for the new todo
@@ -56,28 +63,6 @@ export default function TodoTable() {
     // Add a new state for form submission loading
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    // Add fetch function
-    const fetchTodos = async () => {
-        try {
-            const response = await fetch("/api/todos");
-            const data = await response.json();
-            if (response.ok) {
-                setTodos(data);
-            } else {
-                console.error("Error fetching todos:", data.error);
-            }
-        } catch (error) {
-            console.error("Error fetching todos:", error);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    // Add useEffect to fetch todos on mount
-    useEffect(() => {
-        fetchTodos();
-    }, []);
-
     // adds a new todo optimistically
     // updates ui immediately and reverts on failure
     const addTodo = async () => {
@@ -89,44 +74,12 @@ export default function TodoTable() {
             id: `temp_${crypto.randomUUID()}`,
             title: newTodo.title,
             description: newTodo.description,
-            completed: false,
         };
 
-        setTodos([...todos, tempTodo]);
+        createTodo(tempTodo);
+
         setIsModelOpen(false);
         setNewTodo({ title: "", description: "" });
-
-        try {
-            const response = await fetch("/api/todos", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify(newTodo),
-            });
-
-            if (!response.ok) {
-                setTodos((currentTodos) =>
-                    currentTodos.filter((t) => t.id !== tempTodo.id)
-                );
-                toast.error(
-                    "We were unable to add the todo. Please try again."
-                );
-                console.log("Error adding todo: server error");
-                return;
-            }
-
-            const data = await response.json();
-            setTodos((currentTodos) =>
-                currentTodos.map((t) => (t.id === tempTodo.id ? data : t))
-            );
-        } catch (error) {
-            setTodos((currentTodos) =>
-                currentTodos.filter((t) => t.id !== tempTodo.id)
-            );
-            toast.error("Network error. Check your connection and try again.");
-            console.error("Error adding todo:", error);
-        }
     };
 
     const saveEditedTodo = async () => {
@@ -134,139 +87,25 @@ export default function TodoTable() {
             return;
         }
 
-        const originalTodo = todos.find((t) => t.id === editedTodo.id);
-        if (!originalTodo) return;
+        editTodo({ todo: editedTodo, id: editedTodo.id });
 
-        setTodos((currentTodos) =>
-            currentTodos.map((t) => (t.id === editedTodo.id ? editedTodo : t))
-        );
         setIsModelOpen(false);
-
-        try {
-            const response = await fetch(`/api/todos/${editedTodo.id}`, {
-                method: "PUT",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                    title: editedTodo.title,
-                    description: editedTodo.description,
-                    completed: editedTodo.completed,
-                }),
-            });
-
-            if (!response.ok) {
-                // Revert to original if failed
-                setTodos((currentTodos) =>
-                    currentTodos.map((t) =>
-                        t.id === editedTodo.id ? originalTodo : t
-                    )
-                );
-                toast.error("Unable to update todo. Please try again.");
-                return;
-            }
-
-            setEditedTodo({
-                id: null,
-                title: "",
-                description: "",
-                completed: false,
-            });
-        } catch (error) {
-            // Revert to original on network error
-            setTodos((currentTodos) =>
-                currentTodos.map((t) =>
-                    t.id === editedTodo.id ? originalTodo : t
-                )
-            );
-            toast.error("Network error. Check your connection and try again.");
-            console.error("Error updating todo:", error);
-        }
+        setNewTodo({ title: "", description: "" });
     };
 
-    // handles checkbox change with optimistic update
-    // updates ui immediately and reverts on failure
-    const handleCheckboxChange = async (id) => {
-        const todo = todos.find((t) => t.id === id);
-        if (!todo) return;
-
-        setTodos(
-            todos.map((t) =>
-                t.id === id ? { ...t, completed: !t.completed } : t
-            )
-        );
-
-        try {
-            const response = await fetch(`/api/todos/${id}`, {
-                method: "PUT",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                    completed: !todo.completed,
-                }),
-            });
-
-            if (!response.ok) {
-                setTodos(
-                    todos.map((t) =>
-                        t.id === id ? { ...t, completed: todo.completed } : t
-                    )
-                );
-                toast.error(
-                    "We were unable to update the todo status. Please try again."
-                );
-                console.error(
-                    "We were unable to update the todo status. Please try again."
-                );
-            }
-        } catch (error) {
-            setTodos(
-                todos.map((t) =>
-                    t.id === id ? { ...t, completed: todo.completed } : t
-                )
-            );
-            toast.error(
-                "Hmm, looks like there was a network error. Check your connection and try again."
-            );
-            console.error(
-                "Hmm, looks like there was a network error. Check your connection and try again.",
-                error
-            );
-        }
+    const handleCheckboxChange = async (id, value) => {
+        updateCheckbox({ id, completed: value });
     };
 
     const handleEditTodo = (id) => {
         const todoToEdit = todos.find((todo) => todo.id === id);
 
         setEditedTodo(todoToEdit);
-
         setIsModelOpen(true);
     };
 
     const handleDeleteTodo = async (id) => {
-        const todoToDelete = todos.find((t) => t.id === id);
-        if (!todoToDelete) return;
-
-        setTodos((currentTodos) => currentTodos.filter((t) => t.id !== id));
-
-        try {
-            const response = await fetch(`/api/todos/${id}`, {
-                method: "DELETE",
-            });
-
-            if (!response.ok) {
-                setTodos((currentTodos) => [...currentTodos, todoToDelete]);
-                toast.error("Unable to delete todo. Please try again.");
-                return;
-            }
-
-            toast.success("Todo deleted successfully!");
-        } catch (error) {
-            setTodos((currentTodos) => [...currentTodos, todoToDelete]);
-            toast.error("Network error. Check your connection and try again.");
-            console.error("Error deleting todo:", error);
-        }
+        deleteTodo(id);
     };
 
     const validateForm = (todo) => {
@@ -421,7 +260,7 @@ export default function TodoTable() {
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {isLoading ? (
+                        {isPending ? (
                             <TableRow>
                                 <TableCell
                                     colSpan={4}
@@ -453,7 +292,8 @@ export default function TodoTable() {
                                                 checked={todo.completed}
                                                 onCheckedChange={() =>
                                                     handleCheckboxChange(
-                                                        todo.id
+                                                        todo.id,
+                                                        !todo.completed
                                                     )
                                                 }
                                                 className="rounded-full h-4 w-4 border data-[state=checked]:border-none data-[state=checked]:bg-primary"

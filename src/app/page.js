@@ -1,5 +1,10 @@
 import TodoTable from "./components/TodoTable";
-
+import SignOut from "./components/SignOut";
 export default function Home() {
-    return <TodoTable />;
+    return (
+        <div>
+            <TodoTable />
+            <SignOut />
+        </div>
+    );
 }
