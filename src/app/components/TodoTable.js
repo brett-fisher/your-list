@@ -86,7 +86,11 @@ export default function TodoTable() {
         editTodo({ todo: editedTodo, id: editedTodo.id });
 
         setIsModelOpen(false);
-        setNewTodo({ title: "" });
+        setEditedTodo({
+            id: null,
+            title: "",
+            completed: false,
+        });
     };
 
     const handleCheckboxChange = async (id, value) => {
