@@ -12,7 +12,6 @@ async function editTodo({ todo, id }) {
         .from("todos")
         .update({
             title: todo.title,
-            description: todo.description,
         })
         .eq("id", id)
         .select()

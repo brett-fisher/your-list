@@ -43,21 +43,18 @@ export default function TodoTable() {
     // This holds the form data for the new todo
     const [newTodo, setNewTodo] = useState({
         title: "",
-        description: "",
     });
 
     // This holds the form data for the edited todo
     const [editedTodo, setEditedTodo] = useState({
         id: null,
         title: "",
-        description: "",
         completed: false,
     });
 
     // This holds the error state for the form
     const [errors, setErrors] = useState({
         title: "",
-        description: "",
     });
 
     // Add a new state for form submission loading
@@ -73,13 +70,12 @@ export default function TodoTable() {
         const tempTodo = {
             id: `temp_${crypto.randomUUID()}`,
             title: newTodo.title,
-            description: newTodo.description,
         };
 
         createTodo(tempTodo);
 
         setIsModelOpen(false);
-        setNewTodo({ title: "", description: "" });
+        setNewTodo({ title: "" });
     };
 
     const saveEditedTodo = async () => {
@@ -90,7 +86,7 @@ export default function TodoTable() {
         editTodo({ todo: editedTodo, id: editedTodo.id });
 
         setIsModelOpen(false);
-        setNewTodo({ title: "", description: "" });
+        setNewTodo({ title: "" });
     };
 
     const handleCheckboxChange = async (id, value) => {
@@ -109,15 +105,14 @@ export default function TodoTable() {
     };
 
     const validateForm = (todo) => {
-        if (!todo.title.trim() || !todo.description.trim()) {
+        if (!todo.title.trim()) {
             setErrors({
                 title: "Title is required",
-                description: "Description is required",
             });
             return false;
         }
 
-        setErrors({ title: "", description: "" });
+        setErrors({ title: "" });
         return true;
     };
 
@@ -143,12 +138,11 @@ export default function TodoTable() {
                         onOpenChange={(open) => {
                             setIsModelOpen(open);
                             if (!open) {
-                                setErrors({ title: "", description: "" });
-                                setNewTodo({ title: "", description: "" });
+                                setErrors({ title: "" });
+                                setNewTodo({ title: "" });
                                 setEditedTodo({
                                     id: null,
                                     title: "",
-                                    description: "",
                                     completed: false,
                                 });
                             }
@@ -203,37 +197,10 @@ export default function TodoTable() {
                                             className="col-span-3"
                                         />
                                     </div>
-                                    <div className="grid grid-cols-4 items-start gap-4">
-                                        <Label className="text-right pt-2">
-                                            Description
-                                        </Label>
-                                        <Textarea
-                                            value={
-                                                editedTodo.id
-                                                    ? editedTodo.description
-                                                    : newTodo.description
-                                            }
-                                            onChange={(e) =>
-                                                editedTodo.id
-                                                    ? setEditedTodo({
-                                                          ...editedTodo,
-                                                          description:
-                                                              e.target.value,
-                                                      })
-                                                    : setNewTodo({
-                                                          ...newTodo,
-                                                          description:
-                                                              e.target.value,
-                                                      })
-                                            }
-                                            className="col-span-3"
-                                            rows={4}
-                                        />
-                                    </div>
                                 </div>
-                                {(errors.title || errors.description) && (
+                                {errors.title && (
                                     <div className="text-sm text-red-500 mb-4 text-center">
-                                        Please fill in all required fields
+                                        Please fill in the title field
                                     </div>
                                 )}
                                 <DialogFooter>
@@ -248,11 +215,8 @@ export default function TodoTable() {
                     <TableHeader>
                         <TableRow>
                             <TableHead className="w-[5%]"></TableHead>
-                            <TableHead className="w-[25%] font-bold">
+                            <TableHead className="w-[85%] font-bold">
                                 Item
-                            </TableHead>
-                            <TableHead className="w-[60%] font-bold">
-                                Description
                             </TableHead>
                             <TableHead className="w-[10%] font-bold text-center">
                                 Actions
@@ -263,7 +227,7 @@ export default function TodoTable() {
                         {isPending ? (
                             <TableRow>
                                 <TableCell
-                                    colSpan={4}
+                                    colSpan={3}
                                     className="text-center py-10"
                                 >
                                     <Loader2 className="h-6 w-6 animate-spin mx-auto text-gray-400" />
@@ -272,7 +236,7 @@ export default function TodoTable() {
                         ) : todos.length === 0 ? (
                             <TableRow>
                                 <TableCell
-                                    colSpan={4}
+                                    colSpan={3}
                                     className="text-center py-10 text-gray-500"
                                 >
                                     No todos yet. Add one to get started!
@@ -308,16 +272,6 @@ export default function TodoTable() {
                                         }`}
                                     >
                                         {todo.title}
-                                    </TableCell>
-                                    <TableCell
-                                        className={`align-top whitespace-normal py-4 leading-normal break-words
-                                        ${
-                                            todo.completed
-                                                ? "line-through text-gray-400"
-                                                : ""
-                                        }`}
-                                    >
-                                        {todo.description}
                                     </TableCell>
                                     <TableCell className="align-top">
                                         <div className="flex items-center justify-center gap-2">

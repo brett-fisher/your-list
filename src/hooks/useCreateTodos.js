@@ -12,7 +12,6 @@ async function createTodo(todo) {
         .from("todos")
         .insert({
             title: todo.title,
-            description: todo.description,
             user_id: user.user.id,
             completed: false,
         })
@@ -40,7 +39,7 @@ export default function useCreateTodos() {
 
             return { previousTodos };
         },
-        onError: (error, newTodo, context) => {
+        onError: (context) => {
             queryClient.setQueryData(["todos"], context.previousTodos);
         },
         onSettled: () => {
